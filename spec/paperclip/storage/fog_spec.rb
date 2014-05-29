@@ -447,6 +447,74 @@ describe Paperclip::Storage::Fog do
           assert_equal @dummy.avatar.fog_credentials, @dynamic_fog_credentials
         end
       end
+
+      context "with fog_options not set" do
+        before do
+          rebuild_model(@options)
+          @dummy = Dummy.new
+          @dummy.avatar = StringIO.new('.')
+          @dummy.save
+        end
+
+        it "defaults fog_options to nil" do
+          expect(@dummy.avatar.send(:fog_options)).to be_nil
+        end
+      end
+
+      context "with fog_options set" do
+        before do
+          rebuild_model(@options.merge(fog_options: { content_type: 'text/csv' }))
+          @dummy = Dummy.new
+          @dummy.avatar = StringIO.new('.')
+        end
+
+        it '#fog_options returns the options hash' do
+          @dummy.save
+          expect(@dummy.avatar.send(:fog_options)).to eq({ content_type: 'text/csv' })
+        end
+
+        it 'passes fog_options into fog file creation' do
+          Fog::Storage::AWS::Files.any_instance.expects(:create).with(has_key(:content_type))
+          @dummy.save
+        end
+      end
+
+      context "with fog_options set per style" do
+        before do
+          fog_options = {
+            content_disposition: 'attachment; filename=testing.txt'
+          }
+          rebuild_model(@options.merge(fog_options: fog_options, styles: { medium: "300x300>", thumb: "100x100>" }))
+
+          rebuild_model(@options.merge(fog_options: { content_type: 'text/csv' }))
+          @dummy = Dummy.new
+          @dummy.avatar = StringIO.new('.')
+        end
+
+        it 'sets the @fog_options instance variable to the options hash' do
+          @dummy.save
+          expect(@dummy.avatar.send(:fog_options)).to eq({ content_type: 'text/csv' })
+        end
+      end
+
+
+      context "with a proc for fog_options" do
+        before do
+          @dynamic_fog_options = {
+            content_type: 'text/css'
+          }
+          rebuild_model(@options.merge(fog_options: lambda { |attachment, style| attachment.instance.custom_options }))
+          @dummy = Dummy.new
+          @dummy.stubs(:custom_options).returns(@dynamic_fog_options)
+          @dummy.avatar = @file
+          @dummy.save
+        end
+
+        it "sets content_type" do
+          expect(@dummy.avatar.send(:fog_options)).to eq(@dynamic_fog_options)
+        end
+      end
+
     end
 
   end

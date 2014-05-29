@@ -32,6 +32,10 @@ module Paperclip
     #   that is the alias to the S3 domain of your bucket, e.g.
     #   'http://images.example.com'. This can also be used in
     #   conjunction with Cloudfront (http://aws.amazon.com/cloudfront)
+    # * +fog_options+: A hash of options or a Proc. You may specify a
+    #   hash such as { :content_type => 'text/csv'}. If you use a Proc,
+    #   options are determined at runtime. Paperclip will call that Proc
+    #   with the attachment and style as parameters.
 
     module Fog
       def self.extended base
@@ -97,12 +101,18 @@ module Paperclip
           log("saving #{path(style)}")
           retried = false
           begin
-            directory.files.create(fog_file.merge(
+            fog_attributes = fog_file.merge(
               :body         => file,
               :key          => path(style),
               :public       => fog_public(style),
               :content_type => file.content_type
-            ))
+            )
+
+            if style_fog_options = fog_options(style)
+              fog_attributes.merge!(style_fog_options)
+            end
+
+            directory.files.create(fog_attributes)
           rescue Excon::Errors::NotFound
             raise if retried
             retried = true
@@ -225,6 +235,14 @@ module Paperclip
 
         @directory ||= connection.directories.new(:key => dir)
       end
+
+      def fog_options(style = default_style)
+        options = @options[:fog_options]
+        return if options.nil?
+        options = options.call(self, style) if options.respond_to?(:call)
+        options
+      end
+
     end
   end
 end
